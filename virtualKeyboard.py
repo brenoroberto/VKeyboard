@@ -43,20 +43,19 @@ from string import maketrans
 Uppercase = maketrans("abcdefghijklmnopqrstuvwxyz`1234567890-=[]\;\',./",
   'ABCDEFGHIJKLMNOPQRSTUVWXYZ~!@#$%^&*()_+{}|:"<>?')
 
-#_keyWidth = 27 # default key width including borders
-#_keyHeight = 29 # default key height 
-
-# ----------------------------------------------------------------------------
 
 class VirtualKeyboard():
     ''' Implement a basic full screen virtual keyboard for touchscreens '''
 
-    def __init__(self, screen):
+    def __init__(self, screen, title=''):
 
         self.screen = screen
         self.rect = self.screen.get_rect()
         self.w = self.rect.width
         self.h = self.rect.height
+
+        # title
+        self.title = title
 
         # make a copy of the screen
         self.screenCopy = screen.copy()
@@ -73,19 +72,27 @@ class VirtualKeyboard():
 
         self.x = (self.w-self.keyW*12)/2 # centered
         self.y = 5 # stay away from the edges (better touch)
-#        print 'keys x {} w {} keyW {} keyH {}'.format(self.x, self.w, self.keyW, self.keyH)
 
         pygame.font.init() # Just in case 
         self.keyFont = pygame.font.Font(None, self.keyW) # keyboard font
 
         # set dimensions for text input box
-#        self.textW = self.w-(self.keyW+2) # leave room for escape key (?)
         self.textW = self.keyW*11+2 # leave room for escape key 
-        self.textH = self.keyH*2-6
+        self.textH = self.keyH
+
+        # set title dimensions
+        self.title = title
+        if title:
+          self.titleW = self.keyW*11+2  
+          self.titleH = self.keyH/2
+          self.titleY = self.y
+          self.y += self.titleH + self.keyH/4
+        else:
+          self.titleW = 0 
+          self.titleH = 0
 
         self.caps = False
         self.keys = []
-#        self.textbox = pygame.Surface((self.rect.width,self.keyH*2))
         self.addkeys() # add all the keys
         self.paintkeys() # paint all the keys
 
@@ -95,8 +102,14 @@ class VirtualKeyboard():
     def run(self, text=''):
 
         self.text = text
+
+        if self.title:
+          titleColor = (200,200,200)
+          titleFont = pygame.font.SysFont("Courier", 15, bold=False)
+          title = titleFont.render(self.title , 1, titleColor)
+          self.screen.blit(title, (self.x, self.titleY))
+
         # create an input text box
-        # create a text input box with room for 2 lines of text. leave room for the escape key
         self.input = TextInput(self.screen,self.text,self.x,self.y,self.textW,self.textH)
 
         counter = 0
@@ -107,20 +120,6 @@ class VirtualKeyboard():
             events = pygame.event.get() 
             if events <> None:
                 for e in events:
-# touch screen does not have these events...
-#                    if (e.type == KEYDOWN):
-#                        if e.key == K_ESCAPE:
-#                            self.clear()
-#                            return self.text # Return what we started with
-#                        if e.key == K_RETURN:
-#                            self.clear()
-#                            return self.input.text # Return what the user entered
-#                        if e.key == K_LEFT:
-#                            self.input.deccursor()
-#                            pygame.display.flip()
-#                        if e.key == K_RIGHT:
-#                            self.input.inccursor()
-#                            pygame.display.flip()
                     if (e.type == MOUSEBUTTONDOWN):
                         self.selectatmouse()   
                     if (e.type == MOUSEBUTTONUP):
@@ -200,9 +199,7 @@ class VirtualKeyboard():
         # User has touched the screen - is it inside the textbox, or inside a key rect?
         self.unselectall()
         pos = pygame.mouse.get_pos()
-#        print 'touch {}'.format(pos)
         if self.input.rect.collidepoint(pos):
-#            print 'input {}'.format(pos)
             self.input.setcursor(pos)
         else:
           for key in self.keys:
@@ -256,8 +253,6 @@ class VirtualKeyboard():
         x = self.x + 1
         y += self.keyH + self.keyH/4
 
-#        print 'addkeys keyW {} keyH {}'.format(self.keyW, self.keyH)
-
         onekey = VKey('Shift',x,y,int(self.keyW*2.5),self.keyH,self.keyFont)
         onekey.special = True
         onekey.shiftkey = True
@@ -300,8 +295,6 @@ class VirtualKeyboard():
         self.screen.blit(self.screenCopy,(0,0))
         pygame.display.update()
 
-# ----------------------------------------------------------------------------
-
 class TextInput():
     ''' Handles the text input box and manages the cursor '''
     def __init__(self, screen, text, x, y, w, h):
@@ -318,7 +311,6 @@ class TextInput():
         self.background = pygame.Surface((self.w,self.h))
         self.background.fill((0,0,0)) # fill with black
 
-#        self.font = pygame.font.Font(None, fontsize) # use this if you want more text in the line
         rect = screen.get_rect()
         fsize = int(rect.height/12+0.5) # font size proportional to screen height
         self.txtFont = pygame.font.SysFont('Courier New', fsize, bold=True)
@@ -328,7 +320,6 @@ class TextInput():
         rtX = tX.get_rect() # how big is it?
         self.lineChars = int(self.w/(rtX.width/10))-1 # chars per line (horizontal)
         self.lineH = rtX.height # pixels per line (vertical)
-#        print 'txtinp: width={} rtX={} font={} lineChars={} lineH={}'.format(self.w,rtX,fsize, self.lineChars,self.lineH)
 
         self.cursorlayer = pygame.Surface((2,22)) # thin vertical line
         self.cursorlayer.fill((255,255,255)) # white vertical line
@@ -425,13 +416,10 @@ class TextInput():
         x = pos[0]-self.x + line*self.w # virtual x position
         p = 0
         l = len(self.text)
-#        print 'setcursor {} x={},y={}'.format(pos,x,y)
-#        print 'text {}'.format(self.text)
         while p < l:
             text = self.txtFont.render(self.text[:p+1], 1, (255,255,255)) # how many pixels to next char?
             rtext = text.get_rect()
             textX = rtext.x + rtext.width
-#            print 't = {}, tx = {}'.format(t,textX)
             if textX >= x: break # we found it
             p += 1
         self.cursorpos = p
@@ -441,7 +429,6 @@ class TextInput():
 
 class VKey(object):
     ''' A single key for the VirtualKeyboard '''
-#    def __init__(self, caption, x, y, w=67, h=67):
     def __init__(self, caption, x, y, w, h, font):
         self.x = x
         self.y = y
